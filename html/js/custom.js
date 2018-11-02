@@ -4,6 +4,7 @@ $( document ).ready(function() {
     link.on('click', function(e) {
         e.preventDefault();
         var id = link.data('id');
+
         $.ajax({
             type: "POST",
             url: '/view',

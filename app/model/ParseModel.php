@@ -31,31 +31,44 @@ class ParseModel {
 
             foreach ($currentLevelLinksArray as $currentLevelLinkKey => $currentLevelLink) {
 
-                $linkForParse = $currentLevelLink;
+                if ($depthCounter === 0 || $currentLevelLink !== $url) {
 
-                if ($currentLevelLink !== $url) {
-                    $linkForParse = $this->getHost($url) . $currentLevelLink;
-                }
+                    $linkForParse = $currentLevelLink;
+                    if ($depthCounter !== 0) {
+                        $linkForParse = $this->getHost($url) . $currentLevelLink;
+                    }
 
-                $dataFromCurrentLink = $this->parseContentFromLink($linkForParse);
+                    $dataFromCurrentLink = $this->parseContentFromLink($linkForParse);
 
-                $emailsList = $dataFromCurrentLink['emails'];
+                    $emailsList = array_unique($dataFromCurrentLink['emails']);
+                    $emailDataArray = [];
 
-                if (!empty($emailsList)) {
-                    $emailsNumber = count($dataFromCurrentLink['emails']);
-                    $emailsCounter += $emailsNumber;
+                    if (!empty($emailsList)) {
+                        $emailsNumber = count($emailsList);
+                        $emailsCounter += $emailsNumber;
 
-                    if ($maxEmails <= $emailsCounter) {
-                        $redundantNumber = $maxEmails - $emailsCounter;
-                        $slicedArray = array_slice($dataFromCurrentLink['emails'], $redundantNumber);
 
+                        if ($maxEmails <= $emailsCounter) {
+                            $redundantNumber = $maxEmails - $emailsCounter;
+                            $slicedArray = array_slice($emailsList, $redundantNumber);
+
+                            $emailDataArray['uniqueKey'] = $currentLevelLinkKey;
+                            $emailDataArray['emails'] = $slicedArray;
+
+                            $rawEmailsDataArray['emails'][] = $emailDataArray;
+                            $rawEmailsDataArray['emailsCount'] = $maxEmails;
+
+                            return $rawEmailsDataArray;
+                        }
+
+                        /** Привязываем полученные данные к уникальному ключу ссылки по которой мы получали данные */
                         $emailDataArray['uniqueKey'] = $currentLevelLinkKey;
-                        $emailDataArray['emails'] = $slicedArray;
+                        $emailDataArray['emails'] = $emailsList;
 
                         $rawEmailsDataArray['emails'][] = $emailDataArray;
-                        $rawEmailsDataArray['emailsCount'] = $maxEmails;
-
-                        return $rawEmailsDataArray;
+                    } else {
+                        $emailDataArray['uniqueKey'] = $currentLevelLinkKey;
+                        $emailDataArray['emails'][] = 'No emails was found on this page.';
                     }
 
                     $rawLinks = array_unique($dataFromCurrentLink['links']);
@@ -64,11 +77,6 @@ class ParseModel {
                     foreach ($rawLinks as $link) {
                         $nextLevelLinksArray[$currentLevelLinkKey .'..'. $link] = $link;
                     }
-                    /** Привязываем полученные данные к уникальному ключу ссылки по которой мы получали данные */
-                    $emailDataArray['uniqueKey'] = $currentLevelLinkKey;
-                    $emailDataArray['emails'] = $dataFromCurrentLink['emails'];
-
-                    $rawEmailsDataArray['emails'][] = $emailDataArray;
                 }
             }
 
@@ -78,6 +86,7 @@ class ParseModel {
         }
 
         $rawEmailsDataArray['emailsCount'] = $emailsCounter;
+
         return $rawEmailsDataArray;
     }
 
@@ -87,11 +96,16 @@ class ParseModel {
      */
     private function parseContentFromLink(string $url)
     {
-        $content = file_get_contents($url);
-        $xpath = $this->getXpath($content);
+        $emails = [];
+        $links = [];
 
-        $emails = $this->parseEmails($xpath);
-        $links = $this->parseLinks($xpath);
+        $content = file_get_contents($url);
+        if (!empty($content)) {
+            $xpath = $this->getXpath($content);
+
+            $emails = $this->parseEmails($xpath);
+            $links = $this->parseLinks($xpath);
+        }
 
         return ['emails' => $emails, 'links' => $links];
     }
@@ -156,7 +170,6 @@ class ParseModel {
             $reverseEmailKeysArray = array_reverse(explode('..', $emailsDataArray->uniqueKey));
 
             $emailsArrayWithRecursiveStructure = [];
-            $lowestLeverArray = [];
 
             foreach ($reverseEmailKeysArray as $key => $uniqueKey) {
 
@@ -165,12 +178,16 @@ class ParseModel {
                 }
 
                 if ($key === 0) {
-                    $lowestLeverArray[$uniqueKey] = $emailsDataArray->emails;
+                    $emailsArrayWithRecursiveStructure[$uniqueKey] = $emailsDataArray->emails;
+
                     if (count($reverseEmailKeysArray) === 1) {
-                        $emailsArrayWithRecursiveStructure = $lowestLeverArray;
+                        $emailsArrayWithRecursiveStructure[$uniqueKey] = $emailsDataArray->emails;
                     }
+
                 } else {
-                    $emailsArrayWithRecursiveStructure[$uniqueKey] = $lowestLeverArray;
+                    $tempArray = $emailsArrayWithRecursiveStructure;
+                    $emailsArrayWithRecursiveStructure = [];
+                    $emailsArrayWithRecursiveStructure[$uniqueKey] = $tempArray;
                 }
             }
             $emailsArray = array_merge_recursive($emailsArray, $emailsArrayWithRecursiveStructure);
@@ -207,16 +224,21 @@ class ParseModel {
     public function makeEmailsList(array $array){
         $output = '<ul>';
         foreach($array as $key => $value){
+
             if (!is_int($key)) {
                 $output .= "<li><b>{$key}: </b>";
             } else {
                 $output .= "<li>";
             }
+
             if(is_array($value)){
                 $output .= $this->makeEmailsList($value);
-            }else{
+            } elseif (is_object($value)) {
+                $output .= $this->makeEmailsList((array)$value);
+            } else {
                 $output .= $value;
             }
+            
             $output .= '</li>';
         }
         $output .= '</ul>';
