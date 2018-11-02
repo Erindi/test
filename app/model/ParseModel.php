@@ -238,7 +238,7 @@ class ParseModel {
             } else {
                 $output .= $value;
             }
-            
+
             $output .= '</li>';
         }
         $output .= '</ul>';

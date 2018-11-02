@@ -7,17 +7,20 @@ class HomepageController extends Controller {
         $params = [];
 
         if (!empty($_POST['url']) && !empty($_POST['maxEmails'])) {
-            $url = (string)$_POST['url'];
-            $depth = (int)$_POST['depth'] ?? 0;
-            $maxEmails = (int)$_POST['maxEmails'];
+            $url = filter_var((string)$_POST['url'], FILTER_VALIDATE_URL);
 
-            $rawEmailsDataArray = $this->model->getAllEmailsAndLinks($url, $depth, $maxEmails);
-            $params['url'] = $url;
-            $params['emailsCount'] = $rawEmailsDataArray['emailsCount'];
+            if ($url) {
+                $depth = (int)$_POST['depth'] ?? 0;
+                $maxEmails = (int)$_POST['maxEmails'];
 
-            if (!empty($rawEmailsDataArray['emails'])) {
-                $insertedId = $this->adapter->write('test', $rawEmailsDataArray);
-                $params['insertedId'] = $insertedId;
+                $rawEmailsDataArray = $this->model->getAllEmailsAndLinks($url, $depth, $maxEmails);
+                $params['url'] = $url;
+                $params['emailsCount'] = $rawEmailsDataArray['emailsCount'];
+
+                if (!empty($rawEmailsDataArray['emails'])) {
+                    $insertedId = $this->adapter->write('test', $rawEmailsDataArray);
+                    $params['insertedId'] = $insertedId;
+                }
             }
         }
 
